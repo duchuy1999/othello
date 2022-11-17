@@ -1,27 +1,47 @@
-# For this Othello class, the player only plays with the AI, and always have the black pieces (going first)
+# For this Othello class, the player plays with the AI using the black pieces (going first)
 
 import random
 import time
 from IPython.display import clear_output
+import copy
 
 class othelloBoard():
-    board = [ [" "]*8 for i in range(8)]
-    pieces = {"black": [], "white": []}
+    board = [[" "]*8 for i in range(8)]
     turn = "player"
     ending = False
 
     def __init__(self):
-        self.board[3][3] = 2
-        self.board[3][4] = 1
-        self.board[4][3] = 1
-        self.board[4][4] = 2
+        self.board[3][3] = "B"
+        self.board[3][4] = "W"
+        self.board[4][3] = "W"
+        self.board[4][4] = "B"
 
-        self.pieces["black"].append((3,3))
-        self.pieces["black"].append((4,4))
-        self.pieces["white"].append((3,4))
-        self.pieces["white"].append((4,3))
+    def getScore(self, board):
+        blackScore = sum(x.count("B") for x in board)
+        whiteScore = sum(x.count("W") for x in board)
+        return (blackScore, whiteScore)
 
+    # Q2: Evaluation function
+    # Basic evaluation function
+    def evalFunction(self, board):
+        (blackScore, whiteScore) = self.getScore(board)
+        return blackScore - whiteScore
+        
+    # Q4: Improved evaluation function
+    def improvedEvalFunction(self, board):
+        (blackScore, whiteScore) = self.getScore(board)
+        currScore = whiteScore - blackScore
+        corners = ((0,0),(0,7),(7,0),(7,7))
+        for corner in corners:
+            if (board[corner[0]][corner[1]] == "W"):
+                currScore += 10
+            elif (board[corner[0]][corner[1]] == "B"):
+                currScore -= 10
+        return currScore
+
+    # Q5: Basic GUI, user can input next move through terminal
     def printBoard(self):
+        clear_output(wait=True)
         HLINE = '  +---+---+---+---+---+---+---+---+'
         print('    0   1   2   3   4   5   6   7')
         print(HLINE)
@@ -33,14 +53,18 @@ class othelloBoard():
             print('|')
             print(HLINE)
 
+        print()
+        print("Score:")
+        (blackScore, whiteScore) = self.getScore(self.board)
+        print("Player (black): " + str(blackScore))
+        print("AI (white): " + str(whiteScore))
+
+
     def inRange(self, tile):
         if tile[0]>=0 and tile[0]<=7 and tile[1]>=0 and tile[1]<=7:
             return True
         else:
             return False
-
-    def isEmptyTile(self, tile):
-        return tile not in self.pieces["black"] and tile not in self.pieces["white"]
 
     def getAdjacent(self, tile):
         left = (tile[0]-1, tile[1])
@@ -52,49 +76,133 @@ class othelloBoard():
         downleft = (tile[0]-1, tile[1]+1)
         downright = (tile[0]+1, tile[1]+1) 
 
-        return (left, right, up, down, upleft, upright, downleft, downright)
+        adjacent = (left, right, up, down, upleft, upright, downleft, downright)
+        validAdjacents = list(filter(self.inRange, adjacent))
 
-    # Find empty adjacent tiles
-    def getEmptyAdjacent(self, tile):
-    
-        directions = self.getAdjacent(tile)
-        validAdjacents = list(filter(self.inRange, directions))
-        emptyAdjacents = list(filter(self.isEmptyTile, validAdjacents))
+        return validAdjacents
 
-        return emptyAdjacents
+    def getLegalMoves(self, board, player):
+        tempBoard = copy.deepcopy(board)
 
-    def getLegalMoves(self, color):
         opponent = ""
-        if color == "black":
-            opponent = "white"
-        elif color == "white":
-            opponent = "black"
+        if player == "B":
+            opponent = "W"
+        elif player == "W":
+            opponent = "B"
 
+        emptyTiles = []
         legalMoves = []
-        for tile in self.pieces[opponent]:
-            legalMoves.extend(self.getAdjacent(tile))
+
+        for i in range(8):
+            for j in range(8):
+                if tempBoard[i][j] == opponent:
+                    emptyTiles.extend(self.getAdjacent((i,j)))
         
-        legalMoves = list(filter(self.inRange, legalMoves))
-        legalMoves = list(filter(self.isEmptyTile, legalMoves))
+        emptyTiles = list(filter(self.inRange, emptyTiles))
+        emptyTiles = list(filter(lambda x: (tempBoard[x[0]][x[1]] == " "), emptyTiles))
 
 
+        for tile in emptyTiles:
+            isLegal = False
+            adjacent = self.getAdjacent(tile)
+            oppAdjacent = list(filter(lambda x: (tempBoard[x[0]][x[1]] == opponent), adjacent))
 
-        ### TODO: having a same color piece in the line
-        
+            for oppTile in oppAdjacent:
+                
+                direction = (oppTile[0]-tile[0], oppTile[1]-tile[1])
+                nextTileInDirection = (oppTile[0]+direction[0], oppTile[1]+direction[1])
+                nextX = oppTile[0]+direction[0]
+                nextY = oppTile[1]+direction[1]
+
+                while True:           
+                    # out of range
+                    if (not self.inRange(nextTileInDirection)):
+                        break
+                    # player's color tile, the move is legal
+                    elif (tempBoard[nextX][nextY] == player):
+                        isLegal = True
+                        break
+                    # empty tile
+                    elif (tempBoard[nextX][nextY] == " "):
+                        break
+                    # opponent's color tile, continue to next one
+                    else:
+                        nextTileInDirection = (nextTileInDirection[0]+direction[0], nextTileInDirection[1]+direction[1])
+                        nextX = nextTileInDirection[0]
+                        nextY = nextTileInDirection[1]         
+
+            if isLegal:
+                legalMoves.append(tile)
+
         return list(set(legalMoves))
 
+    def flip(self, board, tile, player):
+        tempBoard = copy.deepcopy(board)
+
+        tempBoard[tile[0]][tile[1]] = player
+
+        opponent = ""
+        if player == "B":
+            opponent = "W"
+        elif player == "W":
+            opponent = "B"
+
+        adjacent = self.getAdjacent(tile)
+        oppAdjacent = list(filter(lambda x: (tempBoard[x[0]][x[1]] == opponent), adjacent))
+
+        for oppTile in oppAdjacent:
+            direction = (oppTile[0]-tile[0], oppTile[1]-tile[1])
+            nextX = oppTile[0]+direction[0]
+            nextY = oppTile[1]+direction[1]
+            nextTileInDirection = (oppTile[0]+direction[0], oppTile[1]+direction[1])
+            route = [oppTile]
+
+            while True:           
+                # out of range
+                if (not self.inRange(nextTileInDirection)):
+                    route.clear()
+                    break
+                # player's color tile, the move is legal
+                elif (tempBoard[nextX][nextY] == player):
+                    break
+                # empty tile
+                elif (tempBoard[nextX][nextY] == " "):
+                    route.clear()
+                    break
+                # opponent's color tile, continue to next one
+                else:
+                    route.append(nextTileInDirection)
+                    nextTileInDirection = (nextTileInDirection[0]+direction[0], nextTileInDirection[1]+direction[1])      
+                    nextX = nextTileInDirection[0]
+                    nextY = nextTileInDirection[1] 
+
+            for tileToFlip in route:
+                if player == "B":
+                    tempBoard[tileToFlip[0]][tileToFlip[1]] = "B"
+                elif player == "W":
+                    tempBoard[tileToFlip[0]][tileToFlip[1]] = "W"
+        
+        return tempBoard
 
 
-    # Move generator
+    # Q2: Move generator
     def move(self):
+        tempBoard = copy.deepcopy(self.board)
 
-        legalMovesBlack = self.getLegalMoves("black")
-        legalMovesWhite = self.getLegalMoves("white")
+        legalMovesBlack = self.getLegalMoves(tempBoard, "B")
+        legalMovesWhite = self.getLegalMoves(tempBoard, "W")
+
+        if len(legalMovesBlack) and len(legalMovesWhite) == 0:
+            self.ending = True
+            return 
+        elif len(legalMovesWhite) == 0:
+            self.turn = "player"
+        elif len(legalMovesBlack) == 0:
+            self.turn = "AI"
 
         if self.turn == "player":
             
             print("Legal Moves Player:" + str(legalMovesBlack))
-            
             inputMove = input()
             x,y = inputMove.split(",")
             nextMove = (int(x),int(y))
@@ -102,32 +210,70 @@ class othelloBoard():
             while nextMove not in legalMovesBlack:
                 print("Illegal move, please retry")
                 inputMove = input()
-                x,y = inputMove.split(" ")
+                x,y = inputMove.split(",")
                 nextMove = (int(x),int(y))
-
-            print("Move: " + str(nextMove))
             
-            self.board[int(x)][int(y)] = 2
-            self.pieces["black"].append(nextMove)
+            newBoard = self.flip(tempBoard, nextMove, "B")
+            self.board = newBoard
             self.turn = "AI"
             
         elif self.turn == "AI":
             
-            print("Legal Moves AI:" + str(legalMovesBlack))
-            nextMove = random.choice(legalMovesWhite)
-
-            self.board[nextMove[0]][nextMove[1]] = 1
-            self.pieces["white"].append(nextMove)
-            print("AI Move: " + str(nextMove))
+            if (len(legalMovesWhite) == 1):
+                nextMove = legalMovesWhite[0]
+            else:
+                nextMove = self.alphaBeta(tempBoard, "", 3, float("-inf"), float("inf"), True)[1]
+            newBoard = self.flip(tempBoard, nextMove, "W")
+            self.board = newBoard
             self.turn = "player"
+
+
+    # Q3: Alpha beta pruning for minimax algorithm
+    def alphaBeta(self, board, move, depth, alpha, beta, maximizingPlayer):
+        tempBoard = copy.deepcopy(board)
+
+        legalMovesBlack = self.getLegalMoves(tempBoard, "B")
+        legalMovesWhite = self.getLegalMoves(tempBoard, "W")
+        gameOver = len(legalMovesBlack) == 0 and legalMovesWhite == 0
+        if depth == 0 or gameOver:
+            return (self.improvedEvalFunction(tempBoard), move)
         
-        self.printBoard()
+        if maximizingPlayer:
+            maxEval = float('-inf')
+            bestMove = legalMovesWhite[0]
+            for moveChoice in legalMovesWhite:
+                newBoard = self.flip(tempBoard, moveChoice, "W")
+                eval = self.alphaBeta(newBoard, moveChoice, depth-1, alpha, beta, False)[0]
+                if eval >= maxEval:
+                    bestMove = moveChoice
+                maxEval = max(maxEval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break
+            return (maxEval, bestMove)
+
+        else:
+            minEval = float('inf')
+            bestMove = legalMovesWhite[0]
+            for moveChoice in legalMovesBlack:
+                newBoard = self.flip(tempBoard, moveChoice, "B")
+                eval = self.alphaBeta(newBoard, moveChoice, depth-1, alpha, beta, True)[0]
+                if eval <= minEval:
+                    bestMove = moveChoice
+                minEval = min(minEval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return (minEval, bestMove)
+
 
     def play(self):
         self.printBoard()
         while self.ending == False:
             self.move()
-
+            self.printBoard()
+            time.sleep(3)
+        print("Game ended!")
 
 newGame = othelloBoard()
 newGame.play()
